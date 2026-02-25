@@ -1,0 +1,16 @@
+{
+    "SchemaVersion": 1,
+    "Company": "YourCompany",
+    "Name": "sw_nsys_plugin",
+    "Description": "A plugin to monitor and record H3P PCIe switch utilization, throughput, and error counters onto the Nsight Systems timeline.",
+    "Images": [],
+    "SiteURL": "https://github.com/your-username/SW_NSYS_Plugin",
+    "Architectures": [
+        "x64"
+    ],
+    "OperatingSystems": [
+        "Linux"
+    ],
+    "MinNsightSystemsVersion": "2024.1.1",
+    "SetupNotes": "Requires libh3ppci.so and nsys-plugin.yaml. Set NSYS_PLUGIN_SEARCH_DIRS to point to the plugins directory."
+}
