@@ -19,12 +19,12 @@ An NVIDIA Nsight Systems plugin to monitor and record H3P PCIe switch utilizatio
 
 ## Installation and Usage with Nsight Systems
 
-Nsight Systems loads the plugin via the configuration provided in the `plugins/nsys-plugin.yaml` manifest.
+Nsight Systems loads the plugin via the configuration provided in the `nsys-plugin.yaml` manifest.
 
 1. Ensure the `sw_nsys_plugin` executable was built successfully.
-2. Set the `NSYS_PLUGIN_SEARCH_DIRS` environment variable to point to the `plugins/` subdirectory inside this repository. You can use the following command in the project root:
+2. Set the `NSYS_PLUGIN_SEARCH_DIRS` environment variable to point to the `$(pwd)` subdirectory inside this repository. You can use the following command in the project root:
    ```bash
-   export NSYS_PLUGIN_SEARCH_DIRS=$(pwd)/plugins
+   export NSYS_PLUGIN_SEARCH_DIRS=$(pwd)
    ```
    *(Note: The variable must point to the folder containing the `nsys-plugin.yaml` file)*
 3. Run `nsys profile` and pass the `--enable` flag with the name of the plugin (`sw_nsys_plugin`):
@@ -56,7 +56,7 @@ nsys profile --enable "sw_nsys_plugin,<arg1>,<val1>,<arg2>,<val2>" <your_target_
 
 - **Combine both (Error module + 500ms interval):**
   ```bash
-  nsys profile --enable "sw_nsys_plugin,-m,error,-t,500" ./my_app
+  nsys profile --enable "sw_nsys_plugin,-m,throughput,-t,500,-p,0,32" ./my_app
   ```
 
 - **Filter by Device Index (e.g., Device 0 only):**
