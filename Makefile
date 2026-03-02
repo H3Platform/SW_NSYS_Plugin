@@ -25,7 +25,7 @@ CXXFLAGS = -I$(H3PPCI_INC_DIR) -I$(CUDA_INC_DIR) -Wall
 # Set rpath to $ORIGIN/lib so the dynamic linker finds libh3ppci.so in the local lib folder
 LDFLAGS = -L$(H3PPCI_LIB_DIR) -lh3ppci -Wl,-rpath,'$$ORIGIN/lib' -ldl
 
-TARGET = sw_nsys_plugin
+TARGET = h3_sw_counters
 SRCS = src/sw_nsys_plugin.cpp
 
 all: $(TARGET)

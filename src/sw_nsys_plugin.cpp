@@ -116,6 +116,12 @@ int main(int argc, char **argv) {
     h3ppciDeviceProp prop;
     h3ppciGetDeviceProperties(&prop, dev);
 
+    // GetPortInfo needs the device initialized to read MMIO registers properly
+    if (h3ppciInitDevice(dev) != H3PPCI_SUCCESS) {
+      LOG_ERR("Failed to initialize device %d (Check permissions or Root).", d);
+      continue;
+    }
+
     char bdfStr[32];
     snprintf(bdfStr, sizeof(bdfStr), "%04x:%02x:%02x.%x", prop.domain, prop.bus,
              prop.device, prop.function);
@@ -157,10 +163,14 @@ int main(int argc, char **argv) {
     const uint64_t schemaId = nvtxPayloadSchemaRegister(domain, &schemaAttr);
 
     for (int p = 0; p < portCount; p++) {
+      h3ppciPortInfo portInfo;
+      if (h3ppciGetPortInfo(dev, p, &portInfo) != H3PPCI_SUCCESS)
+        continue;
+
       if (!config.portIndices.empty()) {
         bool found = false;
         for (int pi : config.portIndices) {
-          if (pi == p) {
+          if (pi == portInfo.portId) {
             found = true;
             break;
           }
@@ -169,9 +179,23 @@ int main(int argc, char **argv) {
           continue;
       }
 
-      h3ppciPortInfo portInfo;
-      if (h3ppciGetPortInfo(dev, p, &portInfo) != H3PPCI_SUCCESS)
-        continue;
+      // 只有在未指定 port (-p) 時，我們才在這邊過濾出真正的 port 並印出日誌
+      bool autoFilterAccept = false;
+      if (config.portIndices.empty()) {
+        if (portInfo.curLink.width > 0 || portInfo.enabled) {
+          autoFilterAccept = true;
+          // 印出符合預設條件的 Port 資訊，方便 Debug
+          // printf("[DEBUG] Auto-selected Port %d (p=%d): enabled=%d, width=%d,
+          // "
+          //        "speed=%s\n",
+          //        portInfo.portId, p, portInfo.enabled,
+          //        portInfo.curLink.width, portInfo.curLink.speedStr);
+        } else {
+          // 這個 port 沒有連線也沒有 enabled，跳過
+          continue;
+        }
+      }
+      autoFilterAccept = autoFilterAccept; // avoid compile warning
 
       std::string counterName = std::string("Port_") +
                                 std::to_string(portInfo.portId) + "_" +
@@ -187,9 +211,7 @@ int main(int argc, char **argv) {
           {dev, d, p, portInfo.portId, domain, counter, prop.name});
     }
 
-    if (config.module == "throughput") {
-      h3ppciInitDevice(dev);
-    }
+    // device is already initialized before the loop
   }
 
   if (monitoredPorts.empty()) {

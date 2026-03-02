@@ -15,53 +15,53 @@ An NVIDIA Nsight Systems plugin to monitor and record H3P PCIe switch utilizatio
    ```bash
    make
    ```
-   This generates the `sw_nsys_plugin` executable.
+   This generates the `h3_sw_counters` executable.
 
 ## Installation and Usage with Nsight Systems
 
-Nsight Systems loads the plugin via the configuration provided in the `nsys-plugin.yaml` manifest.
+Nsight Systems loads the plugin via the configuration provided in the `h3_sw_counters.yaml` manifest.
 
-1. Ensure the `sw_nsys_plugin` executable was built successfully.
+1. Ensure the `h3_sw_counters` executable was built successfully.
 2. Set the `NSYS_PLUGIN_SEARCH_DIRS` environment variable to point to the `$(pwd)` subdirectory inside this repository. You can use the following command in the project root:
    ```bash
    export NSYS_PLUGIN_SEARCH_DIRS=$(pwd)
    ```
-   *(Note: The variable must point to the folder containing the `nsys-plugin.yaml` file)*
-3. Run `nsys profile` and pass the `--enable` flag with the name of the plugin (`sw_nsys_plugin`):
+   *(Note: The variable must point to the folder containing the `h3_sw_counters.yaml` file)*
+3. Run `nsys profile` and pass the `--enable` flag with the name of the plugin (`h3_sw_counters`):
    ```bash
-   nsys profile --enable sw_nsys_plugin <your_target_application>
+   nsys profile --enable h3_sw_counters <your_target_application>
    ```
 
 ## Passing Arguments to the Plugin
 
-When using the `--enable` flag, you can pass custom arguments to the `sw_nsys_plugin` (such as the module type or sampling interval). 
+When using the `--enable` flag, you can pass custom arguments to the `h3_sw_counters` (such as the module type or sampling interval). 
 
 The syntax requires the plugin name followed by its arguments, all separated by **commas** (no spaces) inside double quotes:
 
 ```bash
-nsys profile --enable "sw_nsys_plugin,<arg1>,<val1>,<arg2>,<val2>" <your_target_application>
+nsys profile --enable "h3_sw_counters,<arg1>,<val1>,<arg2>,<val2>" <your_target_application>
 ```
 
 ### Examples:
 
 - **Monitor Error Counters instead of Throughput:**
   ```bash
-  nsys profile --enable "sw_nsys_plugin,-m,error" ./my_app
+  nsys profile --enable "h3_sw_counters,-m,error" ./my_app
   ```
 
 - **Set Sampling Interval to 500ms:**
   ```bash
-  nsys profile --enable "sw_nsys_plugin,-t,500" ./my_app
+  nsys profile --enable "h3_sw_counters,-t,500" ./my_app
   ```
 
 - **Combine both (Error module + 500ms interval):**
   ```bash
-  nsys profile --enable "sw_nsys_plugin,-m,throughput,-t,500,-p,0,32" ./my_app
+  nsys profile --enable "h3_sw_counters,-m,throughput,-t,500,-p,0,32" ./my_app
   ```
 
 - **Filter by Device Index (e.g., Device 0 only):**
   ```bash
-  nsys profile --enable "sw_nsys_plugin,-i,0" ./my_app
+  nsys profile --enable "h3_sw_counters,-i,0" ./my_app
   ```
 
-These arguments are passed directly to the `sw_nsys_plugin` executable by Nsight Systems during the profiling session.
+These arguments are passed directly to the `h3_sw_counters` executable by Nsight Systems during the profiling session.

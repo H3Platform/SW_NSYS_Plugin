@@ -44,8 +44,8 @@
     <p><b>Table of Contents</b></p>
         <ul>
                     <li><a href="#plugin-0">gpfs_metrics</a></li>
-        <li><a href="#plugin-1">network_interface</a></li>
-        <li><a href="#plugin-2">sw_nsys_plugin</a></li>
+        <li><a href="#plugin-1">h3_sw_counters</a></li>
+        <li><a href="#plugin-2">network_interface</a></li>
         </ul>
         <p><a href="#legal-disclaimer">Legal Disclaimer</a></p>
     </nav>
@@ -68,6 +68,22 @@
 
         <article class="plugin-card" id="plugin-1">
             <div class="plugin-header">
+                <h2>h3_sw_counters</h2>
+            </div>
+            <p class="plugin-desc">A plugin to monitor and record H3P PCIe switch utilization, throughput, and error counters onto the Nsight Systems timeline.</p>
+            <div class="plugin-thumb"><a href="./Images/h3_sw_counters.png"><img src="./Images/h3_sw_counters.png" alt="h3_sw_counters image" class="plugin-img" /></a></div>
+            <dl class="plugin-meta">
+                <dt>Architectures</dt><dd>x64</dd>
+                <dt>Operating systems</dt><dd>Linux</dd>
+                <dt>Minimal Nsight Systems version</dt><dd>2026.1.1</dd>
+                <dt>Setup Notes</dt><dd>Requires libh3ppci.so and nsys-plugin.yaml. Set NSYS_PLUGIN_SEARCH_DIRS to point to the plugins directory.</dd>
+                <dt>Site URL</dt><dd><p class="plugin-link"><a href="https://github.com/H3Platform/SW_NSYS_Plugin" rel="noopener noreferrer">https://github.com/H3Platform/SW_NSYS_Plugin</a></p></dd>
+                <dt>Company</dt><dd>H3 Platform Inc.</dd>
+            </dl>
+        </article>
+
+        <article class="plugin-card" id="plugin-2">
+            <div class="plugin-header">
                 <h2>network_interface</h2>
             </div>
             <p class="plugin-desc">A sample plugin, which displays the network counters of a given Ethernet interface. Its aim is to provide a simple example of an Nsight Systems plugin. The plugin source code can be found under SamplePlugins/NetworkUsage.</p>
@@ -79,22 +95,6 @@
                 <dt>Setup Notes</dt><dd>This plugin is included within the Nsight Systems installation package for Linux.</dd>
                 <dt>Site URL</dt><dd><p class="plugin-link"><a href="https://developer.nvidia.com/nsight-systems" rel="noopener noreferrer">https://developer.nvidia.com/nsight-systems</a></p></dd>
                 <dt>Company</dt><dd>NVIDIA</dd>
-            </dl>
-        </article>
-
-        <article class="plugin-card" id="plugin-2">
-            <div class="plugin-header">
-                <h2>sw_nsys_plugin</h2>
-            </div>
-            <p class="plugin-desc">A plugin to monitor and record H3P PCIe switch utilization, throughput, and error counters onto the Nsight Systems timeline.</p>
-            <div class="plugin-thumb"><a href="./Images/sw_nsys_plugin.png"><img src="./Images/sw_nsys_plugin.png" alt="sw_nsys_plugin image" class="plugin-img" /></a></div>
-            <dl class="plugin-meta">
-                <dt>Architectures</dt><dd>x64</dd>
-                <dt>Operating systems</dt><dd>Linux</dd>
-                <dt>Minimal Nsight Systems version</dt><dd>2026.1.1</dd>
-                <dt>Setup Notes</dt><dd>Requires libh3ppci.so and nsys-plugin.yaml. Set NSYS_PLUGIN_SEARCH_DIRS to point to the plugins directory.</dd>
-                <dt>Site URL</dt><dd><p class="plugin-link"><a href="https://www.h3platform.com/" rel="noopener noreferrer">https://www.h3platform.com/</a></p></dd>
-                <dt>Company</dt><dd>H3 Platform Inc.</dd>
             </dl>
         </article>
 <article class="plugin-card" id="legal-disclaimer">

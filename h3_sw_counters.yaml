@@ -1,3 +1,3 @@
-PluginName: sw_nsys_plugin
-ExecutablePath: sw_nsys_plugin
+PluginName: h3_sw_counters
+ExecutablePath: h3_sw_counters
 Description: Collects PCIe switch metrics (throughput, utilization, and errors) and displays them on the Nsight Systems timeline.

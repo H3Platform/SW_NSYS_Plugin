@@ -1,15 +1,15 @@
 {
     "SchemaVersion": 1,
     "Company": "H3 Platform Inc.",
-    "Name": "sw_nsys_plugin",
+    "Name": "h3_sw_counters",
     "Description": "A plugin to monitor and record H3P PCIe switch utilization, throughput, and error counters onto the Nsight Systems timeline.",
     "Images": [
         {
-            "Path": "./Images/sw_nsys_plugin.png",
-            "Description": "sw_nsys_plugin image"
+            "Path": "./Images/h3_sw_counters.png",
+            "Description": "h3_sw_counters image"
         }
     ],
-    "SiteURL": "https://www.h3platform.com/",
+    "SiteURL": "https://github.com/H3Platform/SW_NSYS_Plugin",
     "Architectures": [
         "x64"
     ],
