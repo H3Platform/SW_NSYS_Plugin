@@ -1,6 +1,6 @@
 # SW_NSYS_Plugin
 
-An NVIDIA Nsight Systems plugin to monitor and record H3P PCIe switch utilization, throughput, and error counters onto the Nsight Systems timeline.
+An NVIDIA Nsight Systems plugin specifically designed for **H3P PCIe switch boxes**. It monitors and records switch utilization, throughput, error counters, and device temperature onto the Nsight Systems timeline.
 
 ## Build Requirements
 
@@ -10,8 +10,13 @@ An NVIDIA Nsight Systems plugin to monitor and record H3P PCIe switch utilizatio
 
 ## Building the Plugin
 
-1. Be sure to check the `Makefile` to ensure it points to the correct location of your `libh3ppci.so` library (via `H3PPCI_LIB_DIR` or by manually editing `LDFLAGS`) and the CUDA headers (`CXXFLAGS`).
-2. Run `make` to compile:
+1. Be sure to check the `Makefile` to ensure it points to the correct location of your `libh3ppci.so` / `libh3ppci.a` library.
+2. Before compiling, you must export the NVTX header paths:
+   ```bash
+   export NVTX_PATH="/opt/nvidia/nsight-systems/2026.1.1/target-linux-x64/nvtx/include"
+   export NVTXEXT_PATH="/opt/nvidia/nsight-systems/2026.1.1/target-linux-x64/nvtx/include"
+   ```
+3. Run `make` to compile:
    ```bash
    make
    ```
@@ -56,7 +61,16 @@ nsys profile --enable "h3_sw_counters,<arg1>,<val1>,<arg2>,<val2>" <your_target_
 
 - **Combine both (Error module + 500ms interval):**
   ```bash
-  nsys profile --enable "h3_sw_counters,-m,throughput,-t,500,-p,0,32" ./my_app
+  nsys profile --enable "h3_sw_counters,-m,error,-t,500,-p,0,32" ./my_app
+  ```
+
+- **Monitor Multiple Modules Simultaneously:**
+  ```bash
+  # Monitor throughput and temperature
+  nsys profile --enable "h3_sw_counters,-m,throughput,temperature,-i,0,-p,0" ./my_app
+  
+  # Monitor everything (throughput, error, temperature)
+  nsys profile --enable "h3_sw_counters,-m,all,-i,0,-p,0" ./my_app
   ```
 
 - **Filter by Device Index (e.g., Device 0 only):**

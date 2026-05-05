@@ -19,8 +19,8 @@
 struct Config {
   int deviceIdx = -1;                // -1 means ALL
   std::vector<int> portIndices;      // Empty means ALL
-  std::string module = "throughput"; // throughput | error
-  int intervalMs = 100;
+  std::vector<std::string> modules = {"throughput"}; // throughput | error | temperature
+  int intervalMs = 10;
 };
 
 struct MonitoredPort {
@@ -31,13 +31,14 @@ struct MonitoredPort {
   nvtxDomainHandle_t domain;
   uint64_t counter;
   std::string deviceName;
+  std::string moduleName;
 };
 
 void PrintHelp(const char *progName) {
   printf("Usage: %s [options]\n", progName);
   printf("  -i <idx>      Device index (default: all)\n");
   printf("  -p <p1,p2,..> Port Indices (comma separated, default: all)\n");
-  printf("  -m <module>   Module: throughput | error (default: throughput)\n");
+  printf("  -m <module>   Module: throughput | error | temperature | all (comma separated, default: throughput)\n");
   printf("  -t <ms>       Interval in milliseconds (default: 100)\n");
   printf("  -h            Print this help message\n");
 }
@@ -51,13 +52,11 @@ Config ParseArgs(int argc, char **argv) {
       config.deviceIdx = atoi(optarg);
       break;
     case 'p': {
-      // Handle the immediate argument (e.g., -p 0,32)
       char *ptr = strtok(optarg, ",");
       while (ptr != nullptr) {
         config.portIndices.push_back(atoi(ptr));
         ptr = strtok(nullptr, ",");
       }
-      // Handle subsequent arguments that aren't options (e.g., -p 0 32)
       while (optind < argc && argv[optind][0] != '-') {
         char *extraPtr = strtok(argv[optind], ",");
         while (extraPtr != nullptr) {
@@ -68,9 +67,29 @@ Config ParseArgs(int argc, char **argv) {
       }
       break;
     }
-    case 'm':
-      config.module = optarg;
+    case 'm': {
+      config.modules.clear();
+      auto parseModStr = [&](std::string modStr) {
+        if (modStr == "all") {
+          config.modules = {"throughput", "error", "temperature"};
+        } else {
+          size_t pos = 0;
+          while ((pos = modStr.find(',')) != std::string::npos) {
+            config.modules.push_back(modStr.substr(0, pos));
+            modStr.erase(0, pos + 1);
+          }
+          if (!modStr.empty()) config.modules.push_back(modStr);
+        }
+      };
+      parseModStr(optarg);
+
+      // Consume any extra arguments that were split by Nsight's comma separator
+      while (optind < argc && argv[optind][0] != '-') {
+        parseModStr(argv[optind]);
+        optind++;
+      }
       break;
+    }
     case 't':
       config.intervalMs = atoi(optarg);
       break;
@@ -88,10 +107,11 @@ Config ParseArgs(int argc, char **argv) {
 int main(int argc, char **argv) {
   Config config = ParseArgs(argc, argv);
 
-  if (config.module != "throughput" && config.module != "error") {
-    LOG_ERR("Invalid module: %s. Must be 'throughput' or 'error'.",
-            config.module.c_str());
-    return 1;
+  for (const auto& mod : config.modules) {
+    if (mod != "throughput" && mod != "error" && mod != "temperature") {
+      LOG_ERR("Invalid module: %s. Must be 'throughput', 'error', 'temperature' or 'all'.", mod.c_str());
+      return 1;
+    }
   }
 
   int totalDevices = 0;
@@ -116,7 +136,6 @@ int main(int argc, char **argv) {
     h3ppciDeviceProp prop;
     h3ppciGetDeviceProperties(&prop, dev);
 
-    // GetPortInfo needs the device initialized to read MMIO registers properly
     if (h3ppciInitDevice(dev) != H3PPCI_SUCCESS) {
       LOG_ERR("Failed to initialize device %d (Check permissions or Root).", d);
       continue;
@@ -135,144 +154,186 @@ int main(int argc, char **argv) {
     int portCount = 0;
     h3ppciGetPortCount(dev, &portCount);
 
-    // Setup NVTX Schema for this domain
-    std::vector<nvtxPayloadSchemaEntry_t> schemaIndices;
-    std::vector<std::string> metricNames;
-    if (config.module == "throughput") {
-      metricNames = {"RX_MBs", "TX_MBs", "RX_Util", "TX_Util"};
-    } else {
-      metricNames = {"BadTLP", "BadDLLP", "RxErr", "RecDiag"};
-    }
-
-    for (const auto &name : metricNames) {
-      schemaIndices.push_back({0, NVTX_PAYLOAD_ENTRY_TYPE_DOUBLE, name.c_str(),
-                               "", 0, 0, nullptr, nullptr});
-    }
-
-    nvtxPayloadSchemaAttr_t schemaAttr;
-    memset(&schemaAttr, 0, sizeof(schemaAttr));
-    schemaAttr.fieldMask = NVTX_PAYLOAD_SCHEMA_ATTR_FIELD_TYPE |
-                           NVTX_PAYLOAD_SCHEMA_ATTR_FIELD_ENTRIES |
-                           NVTX_PAYLOAD_SCHEMA_ATTR_FIELD_NUM_ENTRIES |
-                           NVTX_PAYLOAD_SCHEMA_ATTR_FIELD_STATIC_SIZE;
-    schemaAttr.type = NVTX_PAYLOAD_SCHEMA_TYPE_STATIC;
-    schemaAttr.entries = schemaIndices.data();
-    schemaAttr.numEntries = schemaIndices.size();
-    schemaAttr.payloadStaticSize = schemaIndices.size() * sizeof(double);
-
-    const uint64_t schemaId = nvtxPayloadSchemaRegister(domain, &schemaAttr);
-
-    for (int p = 0; p < portCount; p++) {
-      h3ppciPortInfo portInfo;
-      if (h3ppciGetPortInfo(dev, p, &portInfo) != H3PPCI_SUCCESS)
-        continue;
-
-      if (!config.portIndices.empty()) {
-        bool found = false;
-        for (int pi : config.portIndices) {
-          if (pi == portInfo.portId) {
-            found = true;
-            break;
-          }
-        }
-        if (!found)
-          continue;
-      }
-
-      // 只有在未指定 port (-p) 時，我們才在這邊過濾出真正的 port 並印出日誌
-      bool autoFilterAccept = false;
-      if (config.portIndices.empty()) {
-        if (portInfo.curLink.width > 0 || portInfo.enabled) {
-          autoFilterAccept = true;
-          // 印出符合預設條件的 Port 資訊，方便 Debug
-          // printf("[DEBUG] Auto-selected Port %d (p=%d): enabled=%d, width=%d,
-          // "
-          //        "speed=%s\n",
-          //        portInfo.portId, p, portInfo.enabled,
-          //        portInfo.curLink.width, portInfo.curLink.speedStr);
+    for (const auto& mod : config.modules) {
+      if (mod == "throughput" || mod == "error") {
+        std::vector<std::string> metricNames;
+        if (mod == "throughput") {
+          metricNames = {"RX_MBs", "TX_MBs", "RX_Util", "TX_Util"};
         } else {
-          // 這個 port 沒有連線也沒有 enabled，跳過
-          continue;
+          metricNames = {"BadTLP", "BadDLLP", "RxErr", "RecDiag"};
         }
+
+        nvtxPayloadSchemaEntry_t* entries = new nvtxPayloadSchemaEntry_t[metricNames.size()];
+        for (size_t i = 0; i < metricNames.size(); i++) {
+          entries[i] = {0, NVTX_PAYLOAD_ENTRY_TYPE_DOUBLE,
+                        strdup(metricNames[i].c_str()), "", 0, 0, nullptr, nullptr};
+        }
+
+        nvtxPayloadSchemaAttr_t schemaAttr;
+        memset(&schemaAttr, 0, sizeof(schemaAttr));
+        schemaAttr.fieldMask = NVTX_PAYLOAD_SCHEMA_ATTR_FIELD_TYPE |
+                               NVTX_PAYLOAD_SCHEMA_ATTR_FIELD_ENTRIES |
+                               NVTX_PAYLOAD_SCHEMA_ATTR_FIELD_NUM_ENTRIES |
+                               NVTX_PAYLOAD_SCHEMA_ATTR_FIELD_STATIC_SIZE;
+        schemaAttr.type = NVTX_PAYLOAD_SCHEMA_TYPE_STATIC;
+        schemaAttr.entries = entries;
+        schemaAttr.numEntries = metricNames.size();
+        schemaAttr.payloadStaticSize = metricNames.size() * sizeof(double);
+
+        const uint64_t schemaId = nvtxPayloadSchemaRegister(domain, &schemaAttr);
+
+        for (int p = 0; p < portCount; p++) {
+          h3ppciPortInfo portInfo;
+          if (h3ppciGetPortInfo(dev, p, &portInfo) != H3PPCI_SUCCESS)
+            continue;
+
+          if (!config.portIndices.empty()) {
+            bool found = false;
+            for (int pi : config.portIndices) {
+              if (pi == portInfo.portId) {
+                found = true;
+                break;
+              }
+            }
+            if (!found)
+              continue;
+          }
+
+          if (config.portIndices.empty()) {
+            if (portInfo.curLink.width <= 0 && !portInfo.enabled) {
+              continue;
+            }
+          }
+
+          std::string counterName = std::string("Port_") +
+                                    std::to_string(portInfo.portId) + "_" + mod;
+          nvtxCounterAttr_t cntAttr = {};
+          cntAttr.structSize = sizeof(nvtxCounterAttr_t);
+          cntAttr.schemaId = schemaId;
+          cntAttr.name = strdup(counterName.c_str());
+          cntAttr.scopeId = NVTX_SCOPE_CURRENT_VM;
+          uint64_t counter = nvtxCounterRegister(domain, &cntAttr);
+
+          monitoredPorts.push_back({dev, d, p, portInfo.portId, domain, counter, prop.name, mod});
+        }
+      } else if (mod == "temperature") {
+        nvtxPayloadSchemaEntry_t* entries = new nvtxPayloadSchemaEntry_t[1];
+        entries[0] = {0, NVTX_PAYLOAD_ENTRY_TYPE_DOUBLE, "Temperature",
+                      "", 0, 0, nullptr, nullptr};
+
+        nvtxPayloadSchemaAttr_t schemaAttr;
+        memset(&schemaAttr, 0, sizeof(schemaAttr));
+        schemaAttr.fieldMask = NVTX_PAYLOAD_SCHEMA_ATTR_FIELD_TYPE |
+                               NVTX_PAYLOAD_SCHEMA_ATTR_FIELD_ENTRIES |
+                               NVTX_PAYLOAD_SCHEMA_ATTR_FIELD_NUM_ENTRIES |
+                               NVTX_PAYLOAD_SCHEMA_ATTR_FIELD_STATIC_SIZE;
+        schemaAttr.type = NVTX_PAYLOAD_SCHEMA_TYPE_STATIC;
+        schemaAttr.entries = entries;
+        schemaAttr.numEntries = 1;
+        schemaAttr.payloadStaticSize = sizeof(double);
+
+        const uint64_t schemaId = nvtxPayloadSchemaRegister(domain, &schemaAttr);
+        std::string counterName = mod;
+        nvtxCounterAttr_t cntAttr = {};
+        cntAttr.structSize = sizeof(nvtxCounterAttr_t);
+        cntAttr.schemaId = schemaId;
+        cntAttr.name = strdup(counterName.c_str());
+        cntAttr.scopeId = NVTX_SCOPE_CURRENT_VM;
+        uint64_t counter = nvtxCounterRegister(domain, &cntAttr);
+
+        monitoredPorts.push_back({dev, d, -1, -1, domain, counter, prop.name, mod});
       }
-      autoFilterAccept = autoFilterAccept; // avoid compile warning
-
-      std::string counterName = std::string("Port_") +
-                                std::to_string(portInfo.portId) + "_" +
-                                config.module;
-      nvtxCounterAttr_t cntAttr = {};
-      cntAttr.structSize = sizeof(nvtxCounterAttr_t);
-      cntAttr.schemaId = schemaId;
-      cntAttr.name = counterName.c_str();
-      cntAttr.scopeId = NVTX_SCOPE_CURRENT_VM;
-      uint64_t counter = nvtxCounterRegister(domain, &cntAttr);
-
-      monitoredPorts.push_back(
-          {dev, d, p, portInfo.portId, domain, counter, prop.name});
     }
-
-    // device is already initialized before the loop
   }
 
   if (monitoredPorts.empty()) {
-    LOG_ERR("No ports matched criteria.");
+    LOG_ERR("No items matched criteria.");
     return 1;
   }
 
-  printf(
-      "Monitoring %zu ports across %zu devices. Module: %s, Interval: %d ms\n",
-      monitoredPorts.size(), activeDevices.size(), config.module.c_str(),
-      config.intervalMs);
+  std::string moduleListStr = "";
+  for (size_t i = 0; i < config.modules.size(); i++) {
+    moduleListStr += config.modules[i];
+    if (i < config.modules.size() - 1) moduleListStr += ", ";
+  }
+
+  printf("Monitoring %zu metrics across %zu devices. Modules: [%s], Interval: %d ms\n",
+         monitoredPorts.size(), activeDevices.size(), moduleListStr.c_str(), config.intervalMs);
   printf("Press Ctrl+C to stop.\n");
 
-  std::vector<double> values(4); // Fixed to 4 metrics for both modules
+  std::vector<double> values(4);
+  int currentSleepMs = 2;
+  int idleCount = 0;
+
+  bool monitorThroughput = false;
+  for (const auto& mod : config.modules) {
+    if (mod == "throughput") monitorThroughput = true;
+  }
 
   while (true) {
-    if (config.module == "throughput") {
-      for (auto dev_h : activeDevices)
-        h3ppciPerfStart(dev_h);
+    if (monitorThroughput) {
+      for (auto dev_h : activeDevices) h3ppciPerfStart(dev_h);
+      usleep(currentSleepMs * 1000);
+      for (auto dev_h : activeDevices) h3ppciPerfStop(dev_h);
+    } else {
       usleep(config.intervalMs * 1000);
-      for (auto dev_h : activeDevices)
-        h3ppciPerfStop(dev_h);
+    }
 
-      for (auto &mp : monitoredPorts) {
+    bool hasTraffic = false;
+    double maxTrafficBps = 0.0;
+
+    for (auto &mp : monitoredPorts) {
+      if (mp.moduleName == "throughput") {
         h3ppciPerfCal cal;
         if (h3ppciPerfGetCal(mp.dev, mp.portIndex, &cal) == H3PPCI_SUCCESS) {
           values[0] = cal.rxBps / (1024.0 * 1024.0);
           values[1] = cal.txBps / (1024.0 * 1024.0);
           values[2] = cal.rxUtilization;
           values[3] = cal.txUtilization;
-          nvtxCounterSample(mp.domain, mp.counter, values.data(),
-                            4 * sizeof(double));
+          nvtxCounterSample(mp.domain, mp.counter, values.data(), 4 * sizeof(double));
+
+          if (values[0] > maxTrafficBps) maxTrafficBps = values[0];
+          if (values[1] > maxTrafficBps) maxTrafficBps = values[1];
+          if (values[0] > 100 || values[1] > 100) hasTraffic = true;
         }
-      }
-    } else {
-      usleep(config.intervalMs * 1000);
-      for (auto &mp : monitoredPorts) {
+      } else if (mp.moduleName == "error") {
         h3ppciPortErrors errs;
-        if (h3ppciGetPortErrorCounters(mp.dev, mp.portIndex, &errs) ==
-            H3PPCI_SUCCESS) {
+        if (h3ppciGetPortErrorCounters(mp.dev, mp.portIndex, &errs) == H3PPCI_SUCCESS) {
           values[0] = (double)errs.badTlp;
           values[1] = (double)errs.badDllp;
           values[2] = (double)errs.rxErrors;
           values[3] = (double)errs.recoveryDiagnostics;
-          nvtxCounterSample(mp.domain, mp.counter, values.data(),
-                            4 * sizeof(double));
+          nvtxCounterSample(mp.domain, mp.counter, values.data(), 4 * sizeof(double));
+        }
+      } else if (mp.moduleName == "temperature") {
+        double temp = 0.0;
+        if (h3ppciGetTemperature(mp.dev, &temp) == H3PPCI_SUCCESS) {
+          values[0] = temp;
+          nvtxCounterSample(mp.domain, mp.counter, values.data(), sizeof(double));
         }
       }
     }
 
-    if (monitoredPorts.size() == 1) {
-      printf("\rSampled Port %d: %.2f %.2f %.2f %.2f          ",
-             monitoredPorts[0].portId, values[0], values[1], values[2],
-             values[3]);
-      fflush(stdout);
-    } else {
-      static int iterations = 0;
-      printf("\rSampling %zu ports... [Iter: %d]          ",
-             monitoredPorts.size(), ++iterations);
-      fflush(stdout);
+    if (monitorThroughput) {
+      if (hasTraffic) {
+        idleCount = 0;
+        currentSleepMs = config.intervalMs;
+      } else {
+        idleCount++;
+        if (idleCount >= 5) {
+          currentSleepMs = 2;
+          idleCount = 5;
+        }
+      }
     }
+
+    static int iterations = 0;
+    if (monitoredPorts.size() == 1) {
+      printf("\rSampled 1 metric... [Iter: %d]          ", ++iterations);
+    } else {
+      printf("\rSampling %zu metrics... [Iter: %d]          ", monitoredPorts.size(), ++iterations);
+    }
+    fflush(stdout);
   }
 
   return 0;
